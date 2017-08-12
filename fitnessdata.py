@@ -18,10 +18,10 @@ import numpy as np
 CREDENTIALS = 'credentials.txt'
 class FitnessData(object):
     
-    def __init__(self,start_date = None, stop_date = None, date_fmt = '%Y-%M-%d'):
+    def __init__(self,start_date = None, stop_date = None, date_fmt = '%Y-%m-%d'):
         self.date_fmt = date_fmt
-        self.start_date = self._set_date_(start_date)
-        self.stop_date = self._set_date_(stop_date)
+        self._start_date = self._set_date_(start_date)
+        self._stop_date = self._set_date_(stop_date)
         self.credentials = {"MFP_USER":None,"STRAVA_TOKEN":None}
     
     def _set_date_(self,date):
@@ -51,6 +51,21 @@ class FitnessData(object):
                         key,attribute = split
                         if self.credentials.has_key(key):
                             self.credentials[key] = attribute
+    @property
+    def start_date(self):
+        return self._start_date
+    
+    @property
+    def stop_date(self):
+        return self._stop_date
+    
+    @start_date.setter
+    def start_date(self,date):
+        self._start_date = self._set_date_(date)
+    
+    @stop_date.setter
+    def stop_date(self,date):
+        self._stop_date = self._set_date_(date)
         
                 
         
