@@ -28,11 +28,21 @@ class FitnessData(object):
         self.date_fmt = date_fmt
         self._start_date = self._set_date_(start_date)
         self._stop_date = self._set_date_(stop_date)
-        self._credentials = {"MFP_USER":None,"STRAVA_TOKEN":None}
+        self._credentials = {'MFP_USER':None,'STRAVA_TOKEN':None}
+        self.mfp_client = None
+        self.stv_client = None
         
         #Do we need to update the database?
         today = datetime.datetime.today()
         last_update = self.get_last_entry()
+        #Initialize the db
+        if last_update == None:
+            self._read_creds()
+            self.mfp_client = self._make_client('mfp')
+            self.stv_client = self._make_client('strava')
+            if not None in (self.mfp_client,self.stv_client):
+                self._init_db()
+            
     
     def _set_date_(self,date):
         """Make sure date is a valid object"""
@@ -61,12 +71,90 @@ class FitnessData(object):
                     split = [l.strip() for l in line.split(':')]
                     if len(split) == 2:
                         key,attribute = split
-                        if self.credentials.has_key(key):
-                            self.credentials[key] = attribute
+                        if self._credentials.has_key(key):
+                            self._credentials[key] = attribute
+    def _make_client(self,mode):
+        """Make a client of type 'mode'"""
+        if mode == 'mfp':
+            try:
+                client = mfp.Client(self._credentials['MFP_USER'])
+                return client
+            except:
+                print "Invalid credentials supplied for myfitnesspal."
+                return None
+        if mode == 'strava':
+            try:
+                client = strava.Client(access_token = self._credentials['STRAVA_TOKEN'])
+                return client
+            except:
+                print "Invalid credentials supplied for strava."
+                return None
+            
+    def _init_db(self):
+        """Initialize the db if no files are found"""
+        print "Initializing the database..."
+        #Calorie file
+        #If we found the file don't remake it
+        if os.path.isfile(DB_CAL):
+            print "\tFound calorie info. Skipping."
+        else:
+            print "\tUpdating db calorie file"
+            datestr = raw_input("\tDate you began logging calories: ")
+            date = self._set_date_(datestr)
+            if date:
+                with open(DB_CAL, 'w') as calfile:
+                    while date.date() <= datetime.date.today():
+                        print date
+                        mfpdate = self.mfp_client.get_date(date)
+                        if mfpdate.totals:
+                            cals = mfpdate.totals['calories']
+                            goal = mfpdate.totals['calories']
+                        else:
+                            cals = -1
+                            goal = -1
+                        line = "%s,%s,%s\n"%(date.date(),cals,goal)
+                        calfile.write(line)
+                        date = date + datetime.timedelta(days = 1)
+        #Weight file
+        if os.path.isfile(DB_WGT):
+            print "\tFound weight info. Skipping."
+        else:
+            print "\tUpdating db weight file."
+            try: 
+                d = datestr
+            except NameError:
+                datestr = raw_input("\tDate you began tracking weight: ")
+            date = self._set_date_(datestr)
+            wts = self.mfp_client.get_measurements(lower_bound = date.date())
+            with open(DB_WGT, 'w') as wtfile:
+                for key in sorted(wts.keys()):
+                    wt = wts[key]
+                    line = "%s,%s\n"%(date,wt)
+                    wtfile.write(line)
+            
+        #Workout file
+        if os.path.isfile(DB_RUN):
+            print "\tFound run info. Skipping."
+        else:
+            print "\tUpdating db running file."
+            athlete = self.stv_client.get_athlete()
+            date = athlete.created_at
+            acts = self.stv_client.get_activities(after = date)
+            with open(DB_RUN,'w') as runfile:
+                for act in acts:
+                    if act.type == 'Run':
+                        date = act.start_date_local
+                        dist = act.distance
+                        time = act.elapsed_time
+                        line = "%s,%s,%s\n"%(date,dist,time)
+                        runfile.write(line)
+            
+                        
+            
     def get_last_entry(self):
         """Retrieve the date of the most recent entry"""
         if not os.path.isfile(DB_CAL):
-            return None
+            None
         else:
             lastline = ""
             with open(DB_CAL) as calfile:
