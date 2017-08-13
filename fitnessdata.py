@@ -14,6 +14,7 @@ import stravalib as strava
 import datetime
 import os
 import numpy as np
+import matplotlib.pyplot as plt
 
 #Define file names
 CREDENTIALS = 'credentials.txt'
@@ -70,6 +71,9 @@ class FitnessData(object):
         
         if len(cal_list) == 4:
             self._caldate,self._calcons,self._calgoal,final = cal_list
+            #Mask these guys
+            self._calcons = np.ma.masked_where(self._calcons < 0,self._calcons)
+            self._calgoal = np.ma.masked_where(self._calgoal < 0,self._calgoal)
         if len(wt_list) == 2:
             self._wtdate,self._wt = wt_list
         if len(run_list) == 3:
@@ -302,7 +306,7 @@ class FitnessData(object):
             print "DB info not found."
             return None
     
-    def get_calorie_info(self,date = None,binsize = 1):
+    def get_calorie_data(self,date = None,binsize = 1):
         """Get calorie info for a given date. If no date is provided,
         self.start and self.stop are used as bounds, and arrays are returned."""
         if date:
@@ -337,24 +341,114 @@ class FitnessData(object):
             cals = self._calcons[mask]
             goal = self._calgoal[mask]
             
-            return dates,cals,goal
+            #Now bin the data
+            if binsize>=1:
+                bindates,cals = self.binned(dates,cals,binsize)
+                bindates,goal = self.binned(dates,goal,binsize)
+                return bindates,cals,goal
+            else:
+                print "Binsize must be >= 1."
+                return None,None,None
+    
+    def get_weight_data(self,date = None,binsize = 1):
+        """Get weight info for a given date (see get_calorie_info)"""
+        if date:
+            date = self._set_date_(date)
+            if date:
+                mask = [self._wtdate == date]
+                wt = self._wt[mask]
+                
+                if wt.size:
+                    return_wt = wt[0]
+                    return date,return_wt
+                else:
+                    return None,None
+            else:
+                return None,None
+        
+        else:
+            if self.start_date == None:
+                start = datetime.datetime(1,1,1)
+            else:
+                start = self.start_date
+            
+            if self.stop_date == None:
+                stop = datetime.datetime(2100,1,1)
+            else:
+                stop = self.stop_date
+            
+            mask = [(self._wtdate >= start) & (self._wtdate <= stop)]
+            dates = self._wtdate[mask]
+            wt = self._wt[mask]
+            
+            #Now bin the data
+            if binsize>=1:
+                bindates,wt = self.binned(dates,wt,binsize)
+                return bindates,wt
+            else:
+                print "Binsize must be >= 1."
+                return None,None
+            
+    def get_run_data(self,date = None,binsize = 1):
+        """Get data from runs"""
+        if date:
+            date = self._set_date_(date)
+            if date:
+                mask = [self._rundate == date]
+                dist = self._rundist[mask]
+                time = self._runtime[mask]
+                
+                if dist.size and time.size:
+                    return_dist = dist[0]
+                    return_time = time[0]
+                    return date,return_dist,return_time
+                else:
+                    return None,None,None
+            else:
+                return None,None,None
+        
+        else:
+            if self.start_date == None:
+                start = datetime.datetime(1,1,1)
+            else:
+                start = self.start_date
+            
+            if self.stop_date == None:
+                stop = datetime.datetime(2100,1,1)
+            else:
+                stop = self.stop_date
+            
+            mask = [(self._rundate >= start) & (self._rundate <= stop)]
+            dates = self._rundate[mask]
+            dist = self._rundist[mask]
+            time = self._runtime[mask]
+            
+            #Now bin the data
+            if binsize>=1:
+                bindates,dist = self.binned(dates,dist,binsize)
+                bindates,time = self.binned(dates,time,binsize)
+                return bindates,dist,time
+            else:
+                print "Binsize must be >=1."
+                return None,None,None
+            
         
     def binned(self,x,y,binsize,xdates = True,avg = False):
-        """Take x and y data and bin them into 'binsize' size bins"""
+        """Take x and y data and bin them into 'binsize' size bins."""
         #If x axis are date objects
         binsize = float(binsize)
         if xdates:
             #Define the x axis bins
-            dayspan = (x[-1] - x[0]).days
-            bincenters = np.arange(binsize / 2, dayspan, binsize)
+            dayspan = (x[-1] - x[0]).days + binsize
+            bincenters = np.arange(0., dayspan, binsize)
             bincenters_dates = np.array([x[0] + datetime.timedelta(days = b) for b in bincenters])
             data = np.zeros_like(bincenters)
             
-            for i in range(data.size - 1):
+            for i in range(data.size):
                 left = bincenters_dates[i] - datetime.timedelta(days = binsize / 2)
                 right = bincenters_dates[i] + datetime.timedelta(days = binsize /2)
                 
-                mask = [(x>=left) & (x<=right)]
+                mask = [(x>=left) & (x<right)]
                 datamsk = y[mask]
                 
                 if avg:
@@ -362,13 +456,10 @@ class FitnessData(object):
                 else:
                     data[i] = datamsk.sum()
                 
+                print left,right,mask,datamsk
+                
             return bincenters_dates,data
                 
-                
-            
-            
-    def get_weight_info(self,date = None):
-        """Get weight info for a given date (see get_calorie_info)"""
 
     @property
     def start_date(self):
