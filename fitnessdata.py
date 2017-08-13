@@ -42,17 +42,22 @@ class FitnessData(object):
             self.stv_client = self._make_client('strava')
             if not None in (self.mfp_client,self.stv_client):
                 self._init_db()
-        
+        #Update the db
         elif last_update.date() < today.date():
             self._read_creds()
             self.mfp_client = self._make_client('mfp')
             self.stv_client = self._make_client('strava')
             over_write = False
-            if final == 0:
+            if final == '0':
                 over_write = True
             self.update_db(last_update,over_write = over_write)
         
-            
+        #Read data files into arrays
+        self.cal_list = self.readfile(DB_CAL)
+        #wt_list = self.readfile(DB_WGT)
+        #run_list = self.readfile(DB_RUN)
+        
+        
     
     def _set_date_(self,date):
         """Make sure date is a valid object"""
@@ -60,7 +65,7 @@ class FitnessData(object):
         if type(date) in (datetime.date,datetime.datetime,type(None)):
             return date
         #If it's a string, turn it into a datetime
-        elif type(date) == str:
+        elif isinstance(date,str):
             try:
                 date_obj = datetime.datetime.strptime(date,self.date_fmt)
             except ValueError as e:
@@ -161,10 +166,10 @@ class FitnessData(object):
                         date = act.start_date_local
                         dist = act.distance
                         time = act.elapsed_time
-                        line = "%s,%s,%s\n"%(date,dist,time)
+                        line = "%s,%s,%s\n"%(date.date(),dist,time)
                         runfile.write(line)
                         
-    def remove_last_line(fname):
+    def remove_last_line(self,fname):
         """Remove the last line of a file"""
         if os.path.isfile(fname):
             lines = []
@@ -173,9 +178,9 @@ class FitnessData(object):
             with open(fname,'w') as f:
                 wlines = lines[:-1]
                 f.writelines(wlines)
-            return True
+            return lines[-1]
         else:
-            return False
+            return None
                         
     def update_db(self,date,over_write = False):
         """Get new data from and add to db"""
@@ -185,11 +190,12 @@ class FitnessData(object):
             
         if os.path.isfile(DB_CAL) and date: 
             cdate = date.date()
+            last = "any string"
             if over_write:
-                date = date - datetime.timedelta(days = 1)
-                if remove_last_line(DB_CAL):
-                    self.update_db(date)
-            else:
+                cdate = cdate - datetime.timedelta(days = 1)
+                last = self.remove_last_line(DB_CAL)
+            if last:
+                print last,cdate
                 with open(DB_CAL,'a') as calfile:
                     iter_date = cdate
                     while iter_date <= datetime.date.today():
@@ -204,6 +210,7 @@ class FitnessData(object):
                         if iter_date < datetime.date.today():
                             final = 1
                         line = "%s,%s,%s,%s\n"%(iter_date,cals,goal,final)
+                        print line
                         calfile.write(line)
                         iter_date = iter_date + datetime.timedelta(days = 1)
         
@@ -247,6 +254,33 @@ class FitnessData(object):
             date = self._set_date_(datestr)
             return date,final
         
+    def readfile(self,fname):
+        """Read file into np array. Returns list of columns."""
+        if os.path.isfile(fname):
+            try:
+                data = np.genfromtxt(fname,dtype = str, delimiter = ',')
+            except:
+                return None
+            numcols = data.shape[-1]
+            try:
+                date = np.array([self._set_date_(d) for d in data[:,0]])
+            except:
+                date = None
+            
+            return_list = []
+            return_list.append(date)
+            for i in range(1,numcols):
+                col = data[:,i]
+                col = np.array([float(num) for num in col])
+                return_list.append(col)
+            
+            return return_list
+        
+        else:
+            print "DB info not found."
+            return None
+                
+
     @property
     def start_date(self):
         return self._start_date
