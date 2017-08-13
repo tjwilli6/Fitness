@@ -302,7 +302,7 @@ class FitnessData(object):
             print "DB info not found."
             return None
     
-    def get_calorie_info(self,date = None):
+    def get_calorie_info(self,date = None,binsize = 1):
         """Get calorie info for a given date. If no date is provided,
         self.start and self.stop are used as bounds, and arrays are returned."""
         if date:
@@ -335,10 +335,38 @@ class FitnessData(object):
             mask = [(self._caldate >= start) & (self._caldate <= stop)]
             dates = self._caldate[mask]
             cals = self._calcons[mask]
-            goal = self._calcons[mask]
+            goal = self._calgoal[mask]
             
             return dates,cals,goal
         
+    def binned(self,x,y,binsize,xdates = True,avg = False):
+        """Take x and y data and bin them into 'binsize' size bins"""
+        #If x axis are date objects
+        binsize = float(binsize)
+        if xdates:
+            #Define the x axis bins
+            dayspan = (x[-1] - x[0]).days
+            bincenters = np.arange(binsize / 2, dayspan, binsize)
+            bincenters_dates = np.array([x[0] + datetime.timedelta(days = b) for b in bincenters])
+            data = np.zeros_like(bincenters)
+            
+            for i in range(data.size - 1):
+                left = bincenters_dates[i] - datetime.timedelta(days = binsize / 2)
+                right = bincenters_dates[i] + datetime.timedelta(days = binsize /2)
+                
+                mask = [(x>=left) & (x<=right)]
+                datamsk = y[mask]
+                
+                if avg:
+                    data[i] = datamsk.mean()
+                else:
+                    data[i] = datamsk.sum()
+                
+            return bincenters_dates,data
+                
+                
+            
+            
     def get_weight_info(self,date = None):
         """Get weight info for a given date (see get_calorie_info)"""
 
