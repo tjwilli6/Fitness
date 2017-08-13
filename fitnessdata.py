@@ -22,7 +22,7 @@ DB_CAL = 'db/mfpcl.dat'
 DB_RUN = 'db/st_rn.dat'
 
 class FitnessData(object):
-    
+    """This is a docstring"""
     def __init__(self,start_date = None, stop_date = None, date_fmt = '%Y-%m-%d'):
         #Read inputs and define variables
         self.date_fmt = date_fmt
@@ -53,9 +53,32 @@ class FitnessData(object):
             self.update_db(last_update,over_write = over_write)
         
         #Read data files into arrays
-        self.cal_list = self.readfile(DB_CAL)
-        #wt_list = self.readfile(DB_WGT)
-        #run_list = self.readfile(DB_RUN)
+        self._caldate = []
+        self._calcons = []
+        self._calgoal = []
+        
+        self._wtdate = []
+        self._wt = []
+        
+        self._rundate = []
+        self._rundist = []
+        self._runtime = []
+        
+        cal_list = self.readfile(DB_CAL)
+        wt_list = self.readfile(DB_WGT)
+        run_list = self.readfile(DB_RUN)
+        
+        if len(cal_list) == 4:
+            self._caldate,self._calcons,self._calgoal,final = cal_list
+        if len(wt_list) == 2:
+            self._wtdate,self._wt = wt_list
+        if len(run_list) == 3:
+            self._rundate,self._rundist,self._runtime = run_list
+        
+        
+        
+        
+        
         
         
     
@@ -164,8 +187,8 @@ class FitnessData(object):
                 for act in acts:
                     if act.type == 'Run':
                         date = act.start_date_local
-                        dist = act.distance
-                        time = act.elapsed_time
+                        dist = act.distance.num
+                        time = act.elapsed_time.seconds
                         line = "%s,%s,%s\n"%(date.date(),dist,time)
                         runfile.write(line)
                         
@@ -195,7 +218,6 @@ class FitnessData(object):
                 cdate = cdate - datetime.timedelta(days = 1)
                 last = self.remove_last_line(DB_CAL)
             if last:
-                print last,cdate
                 with open(DB_CAL,'a') as calfile:
                     iter_date = cdate
                     while iter_date <= datetime.date.today():
@@ -233,8 +255,8 @@ class FitnessData(object):
                 for act in acts:
                     if act.type == 'Run':
                         date = act.start_date_local
-                        dist = act.distance
-                        time = act.elapsed_time
+                        dist = act.distance.num
+                        time = act.elapsed_time.seconds
                         line = "%s,%s,%s\n"%(date,dist,time)
                         runfile.write(line)
             
@@ -260,7 +282,7 @@ class FitnessData(object):
             try:
                 data = np.genfromtxt(fname,dtype = str, delimiter = ',')
             except:
-                return None
+                return []
             numcols = data.shape[-1]
             try:
                 date = np.array([self._set_date_(d) for d in data[:,0]])
@@ -279,7 +301,46 @@ class FitnessData(object):
         else:
             print "DB info not found."
             return None
+    
+    def get_calorie_info(self,date = None):
+        """Get calorie info for a given date. If no date is provided,
+        self.start and self.stop are used as bounds, and arrays are returned."""
+        if date:
+            date = self._set_date_(date)
+            if date:
+                mask = [self._caldate == date]
+                cals = self._calcons[mask]
+                goal = self._calgoal[mask]
                 
+                if cals.size and goal.size:
+                    return_cals = cals[0]
+                    return_goal = goal[0]
+                    return date,return_cals,return_goal
+                else:
+                    return None,None,None
+            else:
+                return None,None,None
+        
+        else:
+            if self.start_date == None:
+                start = datetime.datetime(1,1,1)
+            else:
+                start = self.start_date
+            
+            if self.stop_date == None:
+                stop = datetime.datetime(2100,1,1)
+            else:
+                stop = self.stop_date
+            
+            mask = [(self._caldate >= start) & (self._caldate <= stop)]
+            dates = self._caldate[mask]
+            cals = self._calcons[mask]
+            goal = self._calcons[mask]
+            
+            return dates,cals,goal
+        
+    def get_weight_info(self,date = None):
+        """Get weight info for a given date (see get_calorie_info)"""
 
     @property
     def start_date(self):
