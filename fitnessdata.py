@@ -24,7 +24,7 @@ DB_RUN = 'db/st_rn.dat'
 
 class FitnessData(object):
     """This is a docstring"""
-    def __init__(self,start_date = None, stop_date = None, date_fmt = '%Y-%m-%d'):
+    def __init__(self,start_date = None, stop_date = None, date_fmt = '%Y-%m-%d',height = 66.):
         #Read inputs and define variables
         self.date_fmt = date_fmt
         self._start_date = self._set_date_(start_date)
@@ -32,6 +32,7 @@ class FitnessData(object):
         self._credentials = {'MFP_USER':None,'STRAVA_TOKEN':None}
         self.mfp_client = None
         self.stv_client = None
+        self.height = height
         
         #Do we need to update the database?
         today = datetime.datetime.today()
@@ -346,7 +347,7 @@ class FitnessData(object):
             goal = self._calgoal[mask]
             
             #Now bin the data
-            if binsize>=1:
+            if binsize>=1 and cals.size:
                 bindates,cals = self.binned(dates,cals,binsize)
                 bindates,goal = self.binned(dates,goal,binsize)
                 return bindates,cals,goal
@@ -387,7 +388,7 @@ class FitnessData(object):
             wt = self._wt[mask]
             
             #Now bin the data
-            if binsize>=1:
+            if binsize>=1 and wt.size:
                 bindates,wt = self.binned(dates,wt,binsize)
                 return bindates,wt
             else:
@@ -429,7 +430,7 @@ class FitnessData(object):
             time = self._runtime[mask]
             
             #Now bin the data
-            if binsize>=1:
+            if binsize>=1 and dist.size:
                 bindates,dist = self.binned(dates,dist,binsize)
                 bindates,time = self.binned(dates,time,binsize)
                 return bindates,dist,time
@@ -437,11 +438,17 @@ class FitnessData(object):
                 print "Binsize must be >=1."
                 return None,None,None
             
-    def BMI(self,wt,ht):
+    def BMI(self,wt):
         wt = float(wt)
-        ht = float(ht)
+        ht = float(self.height)
         bmi = 703 * wt / ht**2
         return bmi
+    
+    def weight_from_BMI(self,bmi):
+        bmi = float(bmi)
+        ht = float(self.height)
+        wt = bmi * ht**2 / 703
+        return wt
             
         
     def binned(self,x,y,binsize,xdates = True,avg = False):
@@ -518,6 +525,35 @@ class FitnessData(object):
         else:
             print "Not enough data."
             return None
+        
+    def print_weight_summary(self):
+        """Print a summary"""
+        BMI_DICT = {"Overweight":self.weight_from_BMI(30.),"Healthy":self.weight_from_BMI(25.)}
+        today = datetime.date.today()
+        last_meas,current_wt = self.get_weight_data(today)
+        if current_wt:
+            current_bmi = self.BMI(current_wt)
+            slope = self.weight_slope()
+            
+            print "As of %s, you weigh %.1f lbs (BMI = %.1f)."%(last_meas,current_wt,current_bmi)
+            
+            if current_wt >= BMI_DICT['Overweight']:
+                print "You are currently obese."
+            elif current_wt < BMI_DICT['Overweight'] and current_wt >= BMI_DICT['Healthy']:
+                print "You are currently overweight."
+            else:
+                print "You are currently at a healthy weight."
+            
+            if slope:
+                print "You are losing %.1f lbs per week."%(slope * -7)
+                
+            for key in sorted(BMI_DICT.keys(),reverse = True):
+                wt = BMI_DICT[key]
+                if current_wt > wt:
+                    wtdate = self.projected_date(wt)
+                    print "You will weigh %.1f (%s) by %s."%(wt,key.lower(),wtdate)
+            
+        
             
     
     @property
