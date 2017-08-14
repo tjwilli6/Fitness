@@ -148,7 +148,6 @@ class FitnessData(object):
             print "\tUpdating db calorie file"
             datestr = raw_input("\tDate you began logging calories (%s): "%self.date_fmt)
             date = self._set_date_(datestr)
-            date = date.date()
             if date:
                 with open(DB_CAL, 'w') as calfile:
                     while date <= datetime.date.today():
@@ -220,7 +219,7 @@ class FitnessData(object):
             date = date + datetime.timedelta(days = 1) #Dont repeat the last line
             
         if os.path.isfile(DB_CAL) and date: 
-            cdate = date.date()
+            cdate = date
             last = "any string"
             if over_write:
                 cdate = cdate - datetime.timedelta(days = 1)
@@ -245,6 +244,7 @@ class FitnessData(object):
                         iter_date = iter_date + datetime.timedelta(days = 1)
         
         if os.path.isfile(DB_WGT) and date:
+            wdate = date
             if type(date) == datetime.datetime:
                 wdate = date.date()
             wts = self.mfp_client.get_measurements(lower_bound = wdate)
@@ -388,9 +388,13 @@ class FitnessData(object):
             wt = self._wt[mask]
             
             #Now bin the data
-            if binsize>=1 and wt.size:
-                bindates,wt = self.binned(dates,wt,binsize)
-                return bindates,wt
+            if binsize>=1:
+                if wt.size:
+                    bindates,wt = self.binned(dates,wt,binsize)
+                    return bindates,wt
+                else:
+                    print "No weight data within selected dates."
+                    return None,None
             else:
                 print "Binsize must be >= 1."
                 return None,None
@@ -438,7 +442,9 @@ class FitnessData(object):
                 print "Binsize must be >=1."
                 return None,None,None
             
-    def BMI(self,wt):
+    def BMI(self,wt = None):
+        if wt == None:
+            dt,wt = self.get_weight_data(datetime.date.today())
         wt = float(wt)
         ht = float(self.height)
         bmi = 703 * wt / ht**2
@@ -479,9 +485,13 @@ class FitnessData(object):
     def weight_slope(self):
         """Linear fit to weight"""
         date,wt = self.get_weight_data()
-        mask = [wt > 0]
-        date = date[mask]
-        wt = wt[mask]
+        
+        if type(date)!=type(None) and type(wt)!=type(None):
+            mask = [wt > 0]
+            date = date[mask]
+            wt = wt[mask]
+        else:
+            return None
         
         if wt.size > 1:
             days = (date[-1] - date[0]).days
