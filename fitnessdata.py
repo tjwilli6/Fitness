@@ -44,7 +44,7 @@ class FitnessData(object):
             if not None in (self.mfp_client,self.stv_client):
                 self._init_db()
         #Update the db
-        elif last_update.date() < today.date():
+        elif last_update < today.date():
             self._read_creds()
             self.mfp_client = self._make_client('mfp')
             self.stv_client = self._make_client('strava')
@@ -90,11 +90,14 @@ class FitnessData(object):
         """Make sure date is a valid object"""
         #If it is already a datetime object, or None
         if type(date) in (datetime.date,datetime.datetime,type(None)):
+            if type(date) == datetime.datetime:
+                date = date.date()
             return date
         #If it's a string, turn it into a datetime
         elif isinstance(date,str):
             try:
                 date_obj = datetime.datetime.strptime(date,self.date_fmt)
+                date_obj = date_obj.date()
             except ValueError as e:
                 print e.args[0]
                 date_obj = None
@@ -312,13 +315,14 @@ class FitnessData(object):
         if date:
             date = self._set_date_(date)
             if date:
-                mask = [self._caldate == date]
+                date = datetime.datetime.combine(date,time)
+                mask = [self._caldate <= date]
                 cals = self._calcons[mask]
                 goal = self._calgoal[mask]
                 
                 if cals.size and goal.size:
-                    return_cals = cals[0]
-                    return_goal = goal[0]
+                    return_cals = cals[-1]
+                    return_goal = goal[-1]
                     return date,return_cals,return_goal
                 else:
                     return None,None,None
@@ -327,12 +331,12 @@ class FitnessData(object):
         
         else:
             if self.start_date == None:
-                start = datetime.datetime(1,1,1)
+                start = datetime.date(1,1,1)
             else:
                 start = self.start_date
             
             if self.stop_date == None:
-                stop = datetime.datetime(2100,1,1)
+                stop = datetime.date(2100,1,1)
             else:
                 stop = self.stop_date
             
@@ -355,12 +359,13 @@ class FitnessData(object):
         if date:
             date = self._set_date_(date)
             if date:
-                mask = [self._wtdate == date]
+                mask = [self._wtdate <= date]
                 wt = self._wt[mask]
                 
                 if wt.size:
-                    return_wt = wt[0]
-                    return date,return_wt
+                    return_wt = wt[wt>0][-1]
+                    dt = self._wtdate[mask][-1]
+                    return dt,return_wt
                 else:
                     return None,None
             else:
@@ -368,12 +373,12 @@ class FitnessData(object):
         
         else:
             if self.start_date == None:
-                start = datetime.datetime(1,1,1)
+                start = datetime.date(1,1,1)
             else:
                 start = self.start_date
             
             if self.stop_date == None:
-                stop = datetime.datetime(2100,1,1)
+                stop = datetime.date(2100,1,1)
             else:
                 stop = self.stop_date
             
@@ -394,13 +399,13 @@ class FitnessData(object):
         if date:
             date = self._set_date_(date)
             if date:
-                mask = [self._rundate == date]
+                mask = [self._rundate <= date]
                 dist = self._rundist[mask]
                 time = self._runtime[mask]
                 
                 if dist.size and time.size:
-                    return_dist = dist[0]
-                    return_time = time[0]
+                    return_dist = dist[dist>0][-1]
+                    return_time = time[dist>0][-1]
                     return date,return_dist,return_time
                 else:
                     return None,None,None
@@ -409,12 +414,12 @@ class FitnessData(object):
         
         else:
             if self.start_date == None:
-                start = datetime.datetime(1,1,1)
+                start = datetime.date(1,1,1)
             else:
                 start = self.start_date
             
             if self.stop_date == None:
-                stop = datetime.datetime(2100,1,1)
+                stop = datetime.date(2100,1,1)
             else:
                 stop = self.stop_date
             
@@ -432,6 +437,12 @@ class FitnessData(object):
                 print "Binsize must be >=1."
                 return None,None,None
             
+    def BMI(self,wt,ht):
+        wt = float(wt)
+        ht = float(ht)
+        bmi = 703 * wt / ht**2
+        return bmi
+            
         
     def binned(self,x,y,binsize,xdates = True,avg = False):
         """Take x and y data and bin them into 'binsize' size bins."""
@@ -448,7 +459,7 @@ class FitnessData(object):
                 left = bincenters_dates[i] - datetime.timedelta(days = binsize / 2)
                 right = bincenters_dates[i] + datetime.timedelta(days = binsize /2)
                 
-                mask = [(x>=left) & (x<right)]
+                mask = [(x>=left) & (x<=right)]
                 datamsk = y[mask]
                 
                 if avg:
@@ -456,11 +467,59 @@ class FitnessData(object):
                 else:
                     data[i] = datamsk.sum()
                 
-                print left,right,mask,datamsk
-                
             return bincenters_dates,data
                 
-
+    def weight_slope(self):
+        """Linear fit to weight"""
+        date,wt = self.get_weight_data()
+        mask = [wt > 0]
+        date = date[mask]
+        wt = wt[mask]
+        
+        if wt.size > 1:
+            days = (date[-1] - date[0]).days
+            wt_diff = wt[-1] - wt[0]
+            slope = wt_diff / days
+            return slope
+        else:
+            return None
+    
+    def projected_weight(self,date):
+        """At current pace what will my weight be by 'date'"""
+        date = self._set_date_(date)
+        if date:
+            if type(date) == datetime.datetime:
+                today = datetime.datetime.today()
+            if type(date) == datetime.date:
+                today = datetime.date.today()
+            
+            dt,cur_wt = self.get_weight_data(today)
+            days = (date - dt).days
+            slope = self.weight_slope()
+            if slope:
+                proj_wt = cur_wt + slope * days
+                return proj_wt
+            else:
+                print "Not enough data."
+                return None
+        else:
+            return None
+    
+    def projected_date(self,weight):
+        """At current pace what day will my weight be 'weight'"""
+        #current wt + slope * ? = weight
+        #? = (weight - current wt ) / slope
+        dt,cur_wt = self.get_weight_data(datetime.date.today())
+        slope = self.weight_slope()
+        if slope:
+            days = (weight - cur_wt) / slope
+            date = dt + datetime.timedelta(days = days)
+            return date
+        else:
+            print "Not enough data."
+            return None
+            
+    
     @property
     def start_date(self):
         return self._start_date
