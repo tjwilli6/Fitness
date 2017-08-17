@@ -14,13 +14,15 @@ import stravalib as strava
 import datetime
 import os
 import numpy as np
+import binning
 import matplotlib.pyplot as plt
 
 #Define file names
-CREDENTIALS = 'credentials.txt'
-DB_WGT = 'db/mfpwt.dat'
-DB_CAL = 'db/mfpcl.dat'
-DB_RUN = 'db/st_rn.dat'
+DIR = '/Users/tjwilliamson/.local/lib/python2.7/site-packages/fitness/'
+CREDENTIALS = DIR+'credentials.txt'
+DB_WGT = DIR+'db/mfpwt.dat'
+DB_CAL = DIR+'db/mfpcl.dat'
+DB_RUN = DIR+'db/st_rn.dat'
 
 class FitnessData(object):
     """This is a docstring"""
@@ -45,7 +47,7 @@ class FitnessData(object):
             if not None in (self.mfp_client,self.stv_client):
                 self._init_db()
         #Update the db
-        elif last_update < today.date():
+        elif last_update < today.date() or final == '0':
             self._read_creds()
             self.mfp_client = self._make_client('mfp')
             self.stv_client = self._make_client('strava')
@@ -79,13 +81,7 @@ class FitnessData(object):
             self._wtdate,self._wt = wt_list
         if len(run_list) == 3:
             self._rundate,self._rundist,self._runtime = run_list
-        
-        
-        
-        
-        
-        
-        
+                
     
     def _set_date_(self,date):
         """Make sure date is a valid object"""
@@ -110,6 +106,7 @@ class FitnessData(object):
     def _read_creds(self):
         """Read login credentials"""
         if not os.path.isfile(CREDENTIALS):
+            print "Credentials not found"
             return {'MFPUSER':None,'STRAVATOKEN':None}
         else:
             with open(CREDENTIALS) as f:
@@ -214,6 +211,7 @@ class FitnessData(object):
                         
     def update_db(self,date,over_write = False):
         """Get new data from and add to db"""
+        print "Updating databse (last update: %s)"%date
         date = self._set_date_(date)
         if date:
             date = date + datetime.timedelta(days = 1) #Dont repeat the last line
@@ -258,14 +256,15 @@ class FitnessData(object):
             if type(date) == datetime.date:
                 time = datetime.time(0,0,0)
                 date = datetime.datetime.combine(date,time)
-            acts = self.stv_client.get_activities(after = date)
+                delta = datetime.timedelta(days = 1)
+            acts = self.stv_client.get_activities(after = date - delta)
             with open(DB_RUN,'a') as runfile:
                 for act in acts:
                     if act.type == 'Run':
                         date = act.start_date_local
                         dist = act.distance.num
                         time = act.elapsed_time.seconds
-                        line = "%s,%s,%s\n"%(date,dist,time)
+                        line = "%s,%s,%s\n"%(date.date(),dist,time)
                         runfile.write(line)
             
                         
@@ -348,12 +347,12 @@ class FitnessData(object):
             
             #Now bin the data
             if binsize>=1 and cals.size:
-                bindates,cals = self.binned(dates,cals,binsize)
-                bindates,goal = self.binned(dates,goal,binsize)
-                return bindates,cals,goal
+                edges,center,binwid,cals = binning.binned(dates,cals,binsize = binsize)
+                edges,center,binwid,goal = binning.binned(dates,goal,binsize = binsize)
+                return edges,center,binwid,cals,goal
             else:
                 print "Binsize must be >= 1."
-                return None,None,None
+                return None,None,None,None,None
     
     def get_weight_data(self,date = None,binsize = 1):
         """Get weight info for a given date (see get_calorie_info)"""
@@ -390,14 +389,14 @@ class FitnessData(object):
             #Now bin the data
             if binsize>=1:
                 if wt.size:
-                    bindates,wt = self.binned(dates,wt,binsize)
-                    return bindates,wt
+                    edges,center,wid,wt = binning.binned(dates,wt,binsize = binsize,average = True)
+                    return edges,center,wid,wt
                 else:
                     print "No weight data within selected dates."
-                    return None,None
+                    return None,None,None,None
             else:
                 print "Binsize must be >= 1."
-                return None,None
+                return None,None,None,None
             
     def get_run_data(self,date = None,binsize = 1):
         """Get data from runs"""
@@ -435,12 +434,12 @@ class FitnessData(object):
             
             #Now bin the data
             if binsize>=1 and dist.size:
-                bindates,dist = self.binned(dates,dist,binsize)
-                bindates,time = self.binned(dates,time,binsize)
-                return bindates,dist,time
+                edges,center,width,dist = binning.binned(dates,dist,binsize = binsize)
+                edges,center,width,time = binning.binned(dates,time,binsize = binsize)
+                return edges,center,width,dist,time
             else:
                 print "Binsize must be >=1."
-                return None,None,None
+                return None,None,None,None,None
             
     def BMI(self,wt = None):
         if wt == None:
@@ -457,36 +456,11 @@ class FitnessData(object):
         return wt
             
         
-    def binned(self,x,y,binsize,xdates = True,avg = False):
-        """Take x and y data and bin them into 'binsize' size bins."""
-        #If x axis are date objects
-        binsize = float(binsize)
-        if xdates:
-            #Define the x axis bins
-            dayspan = (x[-1] - x[0]).days + binsize
-            bincenters = np.arange(0., dayspan, binsize)
-            bincenters_dates = np.array([x[0] + datetime.timedelta(days = b) for b in bincenters])
-            data = np.zeros_like(bincenters)
-            
-            for i in range(data.size):
-                left = bincenters_dates[i] - datetime.timedelta(days = binsize / 2)
-                right = bincenters_dates[i] + datetime.timedelta(days = binsize /2)
-                
-                mask = [(x>=left) & (x<=right)]
-                datamsk = y[mask]
-                
-                if avg:
-                    data[i] = datamsk.mean()
-                else:
-                    data[i] = datamsk.sum()
-                
-            return bincenters_dates,data
-                
     def weight_slope(self):
         """Linear fit to weight"""
-        date,wt = self.get_weight_data()
-        
-        if type(date)!=type(None) and type(wt)!=type(None):
+        edges,center,wid,wt = self.get_weight_data()
+        date = center
+        if type(edges)!=type(None) and type(wt)!=type(None):
             mask = [wt > 0]
             date = date[mask]
             wt = wt[mask]
@@ -494,7 +468,7 @@ class FitnessData(object):
             return None
         
         if wt.size > 1:
-            days = (date[-1] - date[0]).days
+            days = (center[-1] - center[0]).days
             wt_diff = wt[-1] - wt[0]
             slope = wt_diff / days
             return slope
