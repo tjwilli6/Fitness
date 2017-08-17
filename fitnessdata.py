@@ -347,12 +347,12 @@ class FitnessData(object):
             
             #Now bin the data
             if binsize>=1 and cals.size:
-                edges,center,binwid,cals = binning.binned(dates,cals,binsize = binsize)
-                edges,center,binwid,goal = binning.binned(dates,goal,binsize = binsize)
-                return edges,center,binwid,cals,goal
+                edges,center,cals = binning.binned(dates,cals,binsize = binsize)
+                edges,center,goal = binning.binned(dates,goal,binsize = binsize)
+                return edges,center,cals,goal
             else:
                 print "Binsize must be >= 1."
-                return None,None,None,None,None
+                return None,None,None,None
     
     def get_weight_data(self,date = None,binsize = 1):
         """Get weight info for a given date (see get_calorie_info)"""
@@ -389,11 +389,11 @@ class FitnessData(object):
             #Now bin the data
             if binsize>=1:
                 if wt.size:
-                    edges,center,wid,wt = binning.binned(dates,wt,binsize = binsize,average = True)
-                    return edges,center,wid,wt
+                    edges,center,wt = binning.binned(dates,wt,binsize = binsize,average = True)
+                    return edges,center,wt
                 else:
                     print "No weight data within selected dates."
-                    return None,None,None,None
+                    return None,None,None
             else:
                 print "Binsize must be >= 1."
                 return None,None,None,None
@@ -434,12 +434,12 @@ class FitnessData(object):
             
             #Now bin the data
             if binsize>=1 and dist.size:
-                edges,center,width,dist = binning.binned(dates,dist,binsize = binsize)
-                edges,center,width,time = binning.binned(dates,time,binsize = binsize)
-                return edges,center,width,dist,time
+                edges,center,dist = binning.binned(dates,dist,binsize = binsize)
+                edges,center,time = binning.binned(dates,time,binsize = binsize)
+                return edges,center,dist,time
             else:
                 print "Binsize must be >=1."
-                return None,None,None,None,None
+                return None,None,None,None
             
     def BMI(self,wt = None):
         if wt == None:
@@ -458,7 +458,7 @@ class FitnessData(object):
         
     def weight_slope(self):
         """Linear fit to weight"""
-        edges,center,wid,wt = self.get_weight_data()
+        edges,center,wt = self.get_weight_data()
         date = center
         if type(edges)!=type(None) and type(wt)!=type(None):
             mask = [wt > 0]
@@ -468,7 +468,7 @@ class FitnessData(object):
             return None
         
         if wt.size > 1:
-            days = (center[-1] - center[0]).days
+            days = (date[-1] - date[0]).days
             wt_diff = wt[-1] - wt[0]
             slope = wt_diff / days
             return slope
