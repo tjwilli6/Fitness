@@ -57,7 +57,11 @@ def binned(x, y, numbins = 10, binsize = None, average = False):
         ybins = ybins / binhits
     #We need to get get the size of each bin
     #binwidths = bins[1:] - bins[:-1]
-    bincenters = bins + float(binsize) / 2
+    if binsize:
+        width = float(binsize)
+    else:
+        width = float(bins[-1] - bins[0])
+    bincenters = bins + width / 2
     
     if do_dates:
         bins = mjd_to_datetime(bins)
