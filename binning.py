@@ -60,7 +60,7 @@ def binned(x, y, numbins = 10, binsize = None, average = False):
     if binsize:
         width = float(binsize)
     else:
-        width = float(bins[-1] - bins[0])
+        width = float(bins[1] - bins[0])
     bincenters = bins + width / 2
     
     if do_dates:
