@@ -44,7 +44,7 @@ def binned(x, y, numbins = 10, binsize = None, average = False):
             return x,y
     
     #Bin the data
-    inds = np.digitize(xdata,bins)
+    inds = np.digitize(xdata,bins,right = True)
     ybins = np.zeros_like(bins)
     binhits = np.zeros_like(ybins)
     for i,y in enumerate(ydata):
@@ -61,7 +61,7 @@ def binned(x, y, numbins = 10, binsize = None, average = False):
         width = float(binsize)
     else:
         width = float(bins[1] - bins[0])
-    bincenters = bins + width / 2
+    bincenters = bins[:-1] + width / 2
     
     if do_dates:
         bins = mjd_to_datetime(bins)
